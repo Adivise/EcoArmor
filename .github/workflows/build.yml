@@ -39,6 +39,14 @@ jobs:
         if: steps.sync.outputs.run_build == 'true'
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Apply compilation patch
+        if: steps.sync.outputs.run_build == 'true'
+        run: |
+          FILE="eco-core/core-plugin/src/main/kotlin/com/willfp/ecoarmor/sets/ArmorUtils.kt"
+          # Rename private getPartialSetsOn to avoid JVM signature clash with public overload
+          sed -i 's/getPartialSetsOn(itemSets)/getPartialSetsFromItemSets(itemSets)/g' "$FILE"
+          sed -i 's/private fun getPartialSetsOn(itemSets:/private fun getPartialSetsFromItemSets(itemSets:/g' "$FILE"
+
       - name: Build
         if: steps.sync.outputs.run_build == 'true'
         run: ./gradlew clean build shadowJar --no-daemon
