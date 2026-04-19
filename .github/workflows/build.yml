@@ -26,7 +26,7 @@ jobs:
           git remote add upstream https://github.com/Auxilor/EcoArmor.git || true
           git fetch upstream --tags
           
-          LATEST_TAG=$(git ls-remote --refs --tags upstream | awk -F/ '{print $3}' | sort -V | tail -n1)
+          LATEST_TAG=$(git ls-remote --refs --tags upstream | awk -F/ '{print $3}' | grep -E '^[0-9]|v[0-9]' | sort -V | tail -n1)
           echo "Latest upstream tag: $LATEST_TAG"
           
           RELEASE_INFO=$(gh release view "$LATEST_TAG" --json isPrerelease --jq .isPrerelease 2>/dev/null || echo "NOT_FOUND")
@@ -83,7 +83,9 @@ jobs:
           body: |
             ## [STABLE] EcoArmor — v${{ steps.build.outputs.version }} ${{ steps.build.outputs.fallback == 'true' && '(Fallback Build)' || '' }}
             Auto-generated stable build from upstream tag `${{ steps.check.outputs.tag_name }}`.
-            ${{ steps.build.outputs.fallback == 'true' && '> [!IMPORTANT]\n> The build for the original tag failed. This release was generated using the latest development code as a fallback.' || '' }}
+            ${{ steps.build.outputs.fallback == 'true' && '> The build for the original tag failed. This release was generated using the latest development code as a fallback.' || '' }}
+
+            **Workflow Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -175,6 +177,8 @@ jobs:
           body: |
             ## [DEV] EcoArmor — v${{ steps.sync.outputs.gradle_version }}
             Auto-generated development build from upstream master @ `${{ steps.sync.outputs.upstream_sha }}`.
+
+            **Workflow Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
