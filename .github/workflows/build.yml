@@ -38,22 +38,18 @@ jobs:
             echo "run_build=true" >> $GITHUB_OUTPUT
             echo "tag_name=$LATEST_TAG" >> $GITHUB_OUTPUT
             git checkout "tags/$LATEST_TAG"
-            
-            # Fast-fix Gradle version incompatibility with Java 21
-            sed -i 's/gradle-8.0.2-bin.zip/gradle-8.12.1-bin.zip/g' gradle/wrapper/gradle-wrapper.properties
-            
             VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
             echo "version=$VERSION" >> $GITHUB_OUTPUT
             SHA=$(git rev-parse HEAD)
             echo "sha=$SHA" >> $GITHUB_OUTPUT
           fi
 
-      - name: Set up JDK 21
+      - name: Set up JDK 17
         if: steps.check.outputs.run_build == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: 21
+          java-version: 17
 
       - name: Setup Gradle cache
         if: steps.check.outputs.run_build == 'true'
@@ -62,21 +58,10 @@ jobs:
       - name: Build
         if: steps.check.outputs.run_build == 'true'
         run: |
-          FILE="eco-core/core-plugin/src/main/kotlin/com/willfp/ecoarmor/sets/ArmorUtils.kt"
-          if [ -f "$FILE" ]; then
-            # 1. Fix JVM Signature Clash (Private/Public overload conflict)
-            sed -i 's/getPartialSetsOn(itemSets)/getPartialSetsFromItemSets(itemSets)/g' "$FILE"
-            sed -i 's/private fun getPartialSetsOn(itemSets:/private fun getPartialSetsFromItemSets(itemSets:/g' "$FILE"
-            
-            # 2. Fix Type Mismatch (ProvidedHolder vs Holder)
-            # Some versions expect Collection<Holder> but get Collection<ProvidedHolder>
-            sed -i 's/Collection<Holder>/Collection<ProvidedHolder>/g' "$FILE"
-          fi
-          
           ./gradlew clean build shadowJar --no-daemon
           mkdir -p bin
           VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
-          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor.v${VERSION}.jar \;
+          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor v${VERSION}.jar \;
 
       - name: Create Stable Release
         if: steps.check.outputs.run_build == 'true'
@@ -142,10 +127,7 @@ jobs:
         id: sync
         env:
           UPSTREAM_URL: https://github.com/Auxilor/EcoArmor.git
-        run: |
-          bash .github/scripts/sync-upstream.sh
-          # Fast-fix Gradle version incompatibility with Java 21
-          sed -i 's/gradle-8.0.2-bin.zip/gradle-8.12.1-bin.zip/g' gradle/wrapper/gradle-wrapper.properties
+        run: bash .github/scripts/sync-upstream.sh
 
       - name: Set up JDK 21
         if: steps.sync.outputs.run_build == 'true'
@@ -160,21 +142,7 @@ jobs:
 
       - name: Build
         if: steps.sync.outputs.run_build == 'true'
-        run: |
-          FILE="eco-core/core-plugin/src/main/kotlin/com/willfp/ecoarmor/sets/ArmorUtils.kt"
-          if [ -f "$FILE" ]; then
-            # 1. Fix JVM Signature Clash (Private/Public overload conflict)
-            sed -i 's/getPartialSetsOn(itemSets)/getPartialSetsFromItemSets(itemSets)/g' "$FILE"
-            sed -i 's/private fun getPartialSetsOn(itemSets:/private fun getPartialSetsFromItemSets(itemSets:/g' "$FILE"
-            
-            # 2. Fix Type Mismatch (ProvidedHolder vs Holder)
-            sed -i 's/Collection<Holder>/Collection<ProvidedHolder>/g' "$FILE"
-          fi
-          
-          ./gradlew clean build shadowJar --no-daemon
-          mkdir -p bin
-          VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
-          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor.v${VERSION}.jar \;
+        run: ./gradlew clean build shadowJar --no-daemon
 
       - name: Commit sync and push
         id: publish
@@ -212,7 +180,8 @@ jobs:
         run: |
           if [ -z "${NOTIFY_API_URL:-}" ]; then exit 0; fi
           rel_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG_NAME}"
-          dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/EcoArmor.v${VERSION}.jar"
+          # For dev builds, use the shadow jar name format directly since we didn't rename it
+          dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/EcoArmor.${VERSION}-all.jar"
           payload=$(jq -cn \
             --arg plugin_name "EcoArmor" \
             --arg status "dev" \
