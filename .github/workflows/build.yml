@@ -62,10 +62,21 @@ jobs:
       - name: Build
         if: steps.check.outputs.run_build == 'true'
         run: |
+          FILE="eco-core/core-plugin/src/main/kotlin/com/willfp/ecoarmor/sets/ArmorUtils.kt"
+          if [ -f "$FILE" ]; then
+            # 1. Fix JVM Signature Clash (Private/Public overload conflict)
+            sed -i 's/getPartialSetsOn(itemSets)/getPartialSetsFromItemSets(itemSets)/g' "$FILE"
+            sed -i 's/private fun getPartialSetsOn(itemSets:/private fun getPartialSetsFromItemSets(itemSets:/g' "$FILE"
+            
+            # 2. Fix Type Mismatch (ProvidedHolder vs Holder)
+            # Some versions expect Collection<Holder> but get Collection<ProvidedHolder>
+            sed -i 's/Collection<Holder>/Collection<ProvidedHolder>/g' "$FILE"
+          fi
+          
           ./gradlew clean build shadowJar --no-daemon
           mkdir -p bin
           VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
-          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor v${VERSION}.jar \;
+          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor.v${VERSION}.jar \;
 
       - name: Create Stable Release
         if: steps.check.outputs.run_build == 'true'
@@ -150,10 +161,20 @@ jobs:
       - name: Build
         if: steps.sync.outputs.run_build == 'true'
         run: |
+          FILE="eco-core/core-plugin/src/main/kotlin/com/willfp/ecoarmor/sets/ArmorUtils.kt"
+          if [ -f "$FILE" ]; then
+            # 1. Fix JVM Signature Clash (Private/Public overload conflict)
+            sed -i 's/getPartialSetsOn(itemSets)/getPartialSetsFromItemSets(itemSets)/g' "$FILE"
+            sed -i 's/private fun getPartialSetsOn(itemSets:/private fun getPartialSetsFromItemSets(itemSets:/g' "$FILE"
+            
+            # 2. Fix Type Mismatch (ProvidedHolder vs Holder)
+            sed -i 's/Collection<Holder>/Collection<ProvidedHolder>/g' "$FILE"
+          fi
+          
           ./gradlew clean build shadowJar --no-daemon
           mkdir -p bin
           VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
-          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor v${VERSION}.jar \;
+          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor.v${VERSION}.jar \;
 
       - name: Commit sync and push
         id: publish
