@@ -38,6 +38,10 @@ jobs:
             echo "run_build=true" >> $GITHUB_OUTPUT
             echo "tag_name=$LATEST_TAG" >> $GITHUB_OUTPUT
             git checkout "tags/$LATEST_TAG"
+            
+            # Fast-fix Gradle version incompatibility with Java 21
+            sed -i 's/gradle-8.0.2-bin.zip/gradle-8.12.1-bin.zip/g' gradle/wrapper/gradle-wrapper.properties
+            
             VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
             echo "version=$VERSION" >> $GITHUB_OUTPUT
             SHA=$(git rev-parse HEAD)
@@ -55,16 +59,13 @@ jobs:
         if: steps.check.outputs.run_build == 'true'
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Upgrade Gradle Wrapper
-        if: steps.check.outputs.run_build == 'true'
-        run: |
-          ./gradlew wrapper --gradle-version 8.12.1 --distribution-type bin
-          chmod +x gradlew
-
       - name: Build
         if: steps.check.outputs.run_build == 'true'
         run: |
           ./gradlew clean build shadowJar --no-daemon
+          mkdir -p bin
+          VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
+          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor v${VERSION}.jar \;
 
       - name: Create Stable Release
         if: steps.check.outputs.run_build == 'true'
@@ -130,7 +131,10 @@ jobs:
         id: sync
         env:
           UPSTREAM_URL: https://github.com/Auxilor/EcoArmor.git
-        run: bash .github/scripts/sync-upstream.sh
+        run: |
+          bash .github/scripts/sync-upstream.sh
+          # Fast-fix Gradle version incompatibility with Java 21
+          sed -i 's/gradle-8.0.2-bin.zip/gradle-8.12.1-bin.zip/g' gradle/wrapper/gradle-wrapper.properties
 
       - name: Set up JDK 21
         if: steps.sync.outputs.run_build == 'true'
@@ -143,16 +147,13 @@ jobs:
         if: steps.sync.outputs.run_build == 'true'
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Upgrade Gradle Wrapper
-        if: steps.sync.outputs.run_build == 'true'
-        run: |
-          ./gradlew wrapper --gradle-version 8.12.1 --distribution-type bin
-          chmod +x gradlew
-
       - name: Build
         if: steps.sync.outputs.run_build == 'true'
         run: |
           ./gradlew clean build shadowJar --no-daemon
+          mkdir -p bin
+          VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
+          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor v${VERSION}.jar \;
 
       - name: Commit sync and push
         id: publish
