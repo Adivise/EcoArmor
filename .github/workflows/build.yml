@@ -9,6 +9,9 @@ concurrency:
   group: auto-build-${{ github.repository }}
   cancel-in-progress: false
 
+env:
+  PLUGIN_NAME: EcoArmor
+
 jobs:
   stable-release:
     runs-on: ubuntu-latest
@@ -23,7 +26,7 @@ jobs:
       - name: Resolve latest upstream tag
         id: check
         run: |
-          git remote add upstream https://github.com/Auxilor/EcoArmor.git || true
+          git remote add upstream https://github.com/Auxilor/${{ env.PLUGIN_NAME }}.git || true
           git fetch upstream --tags
           
           LATEST_TAG=$(git ls-remote --refs --tags upstream | awk -F/ '{print $3}' | grep -E '^[0-9]|v[0-9]' | sort -V | tail -n1)
@@ -59,11 +62,12 @@ jobs:
         id: build
         if: steps.check.outputs.run_build == 'true'
         run: |
+          # Try building the checked-out tag
           if ./gradlew clean build shadowJar --no-daemon; then
             echo "fallback=false" >> $GITHUB_OUTPUT
             echo "version=${{ steps.check.outputs.version }}" >> $GITHUB_OUTPUT
           else
-            echo "Stable build failed, falling back to dev version (master)..."
+            echo "Stable build for tag ${{ steps.check.outputs.tag_name }} failed. Falling back to master branch."
             git checkout master
             ./gradlew clean build shadowJar --no-daemon
             VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
@@ -81,7 +85,7 @@ jobs:
           prerelease: false
           make_latest: true
           body: |
-            ## [STABLE] EcoArmor — v${{ steps.build.outputs.version }} ${{ steps.build.outputs.fallback == 'true' && '(Fallback Build)' || '' }}
+            ## [STABLE] ${{ env.PLUGIN_NAME }} — v${{ steps.build.outputs.version }} ${{ steps.build.outputs.fallback == 'true' && '(Fallback Build)' || '' }}
             Auto-generated stable build from upstream tag `${{ steps.check.outputs.tag_name }}`.
             ${{ steps.build.outputs.fallback == 'true' && '> The build for the original tag failed. This release was generated using the latest development code as a fallback.' || '' }}
 
@@ -100,9 +104,9 @@ jobs:
         run: |
           if [ -z "${NOTIFY_API_URL:-}" ]; then exit 0; fi
           rel_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG_NAME}"
-          dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/EcoArmor.v${VERSION}.jar"
+          dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${{ env.PLUGIN_NAME }}.v${VERSION}.jar"
           payload=$(jq -cn \
-            --arg plugin_name "EcoArmor" \
+            --arg plugin_name "${{ env.PLUGIN_NAME }}" \
             --arg status "stable" \
             --arg version "$VERSION" \
             --arg tag "$TAG_NAME" \
@@ -137,7 +141,7 @@ jobs:
       - name: Sync from upstream (Dev)
         id: sync
         env:
-          UPSTREAM_URL: https://github.com/Auxilor/EcoArmor.git
+          UPSTREAM_URL: https://github.com/Auxilor/${{ env.PLUGIN_NAME }}.git
         run: bash .github/scripts/sync-upstream.sh
 
       - name: Set up JDK 21
@@ -175,7 +179,7 @@ jobs:
           prerelease: true
           make_latest: false
           body: |
-            ## [DEV] EcoArmor — v${{ steps.sync.outputs.gradle_version }}
+            ## [DEV] ${{ env.PLUGIN_NAME }} — v${{ steps.sync.outputs.gradle_version }}
             Auto-generated development build from upstream master @ `${{ steps.sync.outputs.upstream_sha }}`.
 
             **Workflow Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
@@ -193,9 +197,9 @@ jobs:
         run: |
           if [ -z "${NOTIFY_API_URL:-}" ]; then exit 0; fi
           rel_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG_NAME}"
-          dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/EcoArmor.v${VERSION}.jar"
+          dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/${{ env.PLUGIN_NAME }}.v${VERSION}.jar"
           payload=$(jq -cn \
-            --arg plugin_name "EcoArmor" \
+            --arg plugin_name "${{ env.PLUGIN_NAME }}" \
             --arg status "dev" \
             --arg version "$VERSION" \
             --arg tag "$TAG_NAME" \
