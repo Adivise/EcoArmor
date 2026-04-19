@@ -44,37 +44,46 @@ jobs:
             echo "sha=$SHA" >> $GITHUB_OUTPUT
           fi
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         if: steps.check.outputs.run_build == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: 17
+          java-version: 21
 
       - name: Setup Gradle cache
         if: steps.check.outputs.run_build == 'true'
         uses: gradle/actions/setup-gradle@v3
 
       - name: Build
+        id: build
         if: steps.check.outputs.run_build == 'true'
         run: |
-          ./gradlew clean build shadowJar --no-daemon
-          mkdir -p bin
-          VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
-          find build/libs -name "*-all.jar" -exec cp {} bin/EcoArmor v${VERSION}.jar \;
+          if ./gradlew clean build shadowJar --no-daemon; then
+            echo "fallback=false" >> $GITHUB_OUTPUT
+            echo "version=${{ steps.check.outputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "Stable build failed, falling back to dev version (master)..."
+            git checkout master
+            ./gradlew clean build shadowJar --no-daemon
+            VERSION=$(grep -E '^version[[:space:]]*=' gradle.properties | head -1 | sed 's/^[^=]*=[[:space:]]*//;s/[[:space:]]*$//;s/#.*//')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "fallback=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create Stable Release
         if: steps.check.outputs.run_build == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.check.outputs.tag_name }}
-          name: ${{ steps.check.outputs.version }} (Stable)
+          name: ${{ steps.build.outputs.version }} (Stable Build)
           files: bin/*.jar
           prerelease: false
           make_latest: true
           body: |
-            ## [STABLE] EcoArmor — v${{ steps.check.outputs.version }}
+            ## [STABLE] EcoArmor — v${{ steps.build.outputs.version }} ${{ steps.build.outputs.fallback == 'true' && '(Fallback Build)' || '' }}
             Auto-generated stable build from upstream tag `${{ steps.check.outputs.tag_name }}`.
+            ${{ steps.build.outputs.fallback == 'true' && '> [!IMPORTANT]\n> The build for the original tag failed. This release was generated using the latest development code as a fallback.' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -84,7 +93,7 @@ jobs:
           NOTIFY_API_URL: ${{ secrets.NOTIFY_API_URL }}
           NOTIFY_API_KEY: ${{ secrets.NOTIFY_API_KEY }}
           TAG_NAME: ${{ steps.check.outputs.tag_name }}
-          VERSION: ${{ steps.check.outputs.version }}
+          VERSION: ${{ steps.build.outputs.version }}
           UP_SHA: ${{ steps.check.outputs.sha }}
         run: |
           if [ -z "${NOTIFY_API_URL:-}" ]; then exit 0; fi
@@ -158,7 +167,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.sync.outputs.tag_name }}
-          name: ${{ steps.sync.outputs.release_name }} (Dev)
+          name: ${{ steps.sync.outputs.release_name }}
           target_commitish: ${{ steps.publish.outputs.head_sha }}
           files: bin/*.jar
           prerelease: true
@@ -180,8 +189,7 @@ jobs:
         run: |
           if [ -z "${NOTIFY_API_URL:-}" ]; then exit 0; fi
           rel_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG_NAME}"
-          # For dev builds, use the shadow jar name format directly since we didn't rename it
-          dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/EcoArmor.${VERSION}-all.jar"
+          dl_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/EcoArmor.v${VERSION}.jar"
           payload=$(jq -cn \
             --arg plugin_name "EcoArmor" \
             --arg status "dev" \
